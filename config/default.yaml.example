@@ -1,0 +1,84 @@
+stocks:
+  - "000001.SZ"
+  - "600000.SH"
+
+dates:
+  train_start: "2020-01-01"
+  train_end: "2024-12-31"
+  test_start: "2025-01-01"
+  test_end: "2025-12-31"
+
+data:
+  source_priority:
+    - "xtquant"
+    - "akshare"
+    - "baostock"
+  output_dir: "data/processed"
+  raw_dir: "data/raw"
+  xtquant:
+    credentials_env: "XTQUANT_PATH"
+  baostock:
+    user_id: ""
+    password_env: "BAOSTOCK_PWD"
+
+indicators:
+  - "macd"
+  - "boll_ub"
+  - "boll_lb"
+  - "rsi_30"
+  - "dx_30"
+  - "close_30_sma"
+  - "close_60_sma"
+
+environment:
+  initial_amount: 1000000
+  hmax: 100
+  buy_cost_pct: 0.001
+  sell_cost_pct: 0.001
+  reward_scaling: 0.0001
+
+training:
+  algorithm: "ppo"
+  total_timesteps: 100000
+  model_dir: "models"
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+  sac:
+    learning_rate: 0.0001
+    batch_size: 256
+    gamma: 0.99
+    tau: 0.005
+  td3:
+    learning_rate: 0.001
+    batch_size: 256
+    gamma: 0.99
+    tau: 0.005
+
+backtest:
+  report_dir: "reports"
+  benchmark: "000300.SH"
+
+sentiment:
+  enabled: false
+  news_file: ""
+  output_dir: "data/sentiment"
+  model_id: "Qwen/Qwen2.5-7B-Instruct"
+  quantize_4bit: true
+  max_new_tokens: 512
+  batch_size: 8
+
+fundamentals:
+  enabled: false
+  reports_dir: "data/reports_text"
+  output_dir: "data/fundamentals"
+
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  structured: true
+
+live_trading: false
