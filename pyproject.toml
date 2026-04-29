@@ -42,3 +42,6 @@ finsys = "finquant.cli.main:cli"
 
 [tool.setuptools.packages.find]
 include = ["finquant*"]
+
+[tool.coverage.run]
+omit = ["finquant/cli/main.py"]

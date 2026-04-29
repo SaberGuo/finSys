@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from finquant.nlp.model import QwenModel
+
 
 @dataclass
 class SentimentRecord:
@@ -61,8 +63,6 @@ class SentimentProcessor:
 
     def __init__(self, config) -> None:
         self._config = config
-        from finquant.nlp.model import QwenModel
-
         self._qwen = QwenModel(config)
         self._loaded = False
 
