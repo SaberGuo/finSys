@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "date": "2024-09-26",
+  "selected_tickers": [
+    "600050.SH",
+    "600016.SH",
+    "000001.SZ",
+    "600048.SH",
+    "000002.SZ"
+  ],
+  "scores": {
+    "600050.SH": 0.4080790900691609,
+    "600016.SH": 0.3417515458743481,
+    "000001.SZ": 0.20397597661232353,
+    "600048.SH": -0.3786956127589705,
+    "000002.SZ": -0.6382251048834192
+  },
+  "market_state": "oscillation",
+  "active_factors": [
+    "low_volatility",
+    "low_turnover",
+    "high_dividend"
+  ],
+  "factor_weights": {
+    "low_volatility": 0.3333333333333333,
+    "low_turnover": 0.3333333333333333,
+    "high_dividend": 0.3333333333333333
+  },
+  "index_metrics": {
+    "close": 14.530000000000001,
+    "adx": 100.0,
+    "ma50": 14.285,
+    "ma50_ratio": 1.0171508575428772,
+    "volume_ma20_ratio": 1.0009096567242783
+  },
+  "exclusion_reasons": {
+    "600000.SH": "limit_up",
+    "600028.SH": "limit_up",
+    "600030.SH": "limit_up",
+    "600036.SH": "limit_up"
+  }
+}

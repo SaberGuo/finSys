@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "date": "2024-03-01",
+  "selected_tickers": [
+    "600703.SH"
+  ],
+  "scores": {
+    "600703.SH": 0.9984541235980368
+  },
+  "market_state": "volume_contraction",
+  "active_factors": [
+    "ma_breakout",
+    "volume_surge"
+  ],
+  "factor_weights": {
+    "ma_breakout": 0.6,
+    "volume_surge": 0.4
+  },
+  "index_metrics": {
+    "close": 21.32,
+    "adx": 20.183176532185275,
+    "ma50": 20.351799999999997,
+    "ma50_ratio": 1.0475731876295955,
+    "volume_ma20_ratio": 0.742022485555521
+  },
+  "exclusion_reasons": {}
+}

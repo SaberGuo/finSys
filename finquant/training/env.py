@@ -24,67 +24,139 @@ INDICATORS: list[str] = [
 # Per-stock observation dims: close + volume + len(INDICATORS)
 OBS_DIM_PER_STOCK: int = 2 + len(INDICATORS)  # = 9
 
+# FinRL imports optional data-source modules at package-import time.
+# Provide tiny stubs so local/test environments don't need those deps.
+_OPTIONAL_STUBS: dict[str, Any] = {
+    "alpaca_trade_api": {"REST": object},
+    "wrds": {},
+    "yfinance": {},
+    "ccxt": {},
+    "jqdatasdk": {},
+    "quantconnect": {},
+}
+for _mod_name, _attrs in _OPTIONAL_STUBS.items():
+    if _mod_name not in sys.modules:
+        _stub = types.ModuleType(_mod_name)
+        for _k, _v in _attrs.items():
+            setattr(_stub, _k, _v)
+        sys.modules[_mod_name] = _stub
 
-def compute_obs_dim(stock_dim: int, indicators: list[str] | None = None) -> int:
+
+def compute_obs_dim(
+    stock_dim: int,
+    indicators: list[str] | None = None,
+    fusion_indicators: list[str] | None = None,
+) -> int:
     """Return total observation-space dimension for *stock_dim* stocks.
 
-    Formula: ``1 + (2 + len(indicators)) * stock_dim``
+    Formula: ``1 + (2 + len(indicators) + len(fusion_indicators)) * stock_dim``
     where 1 = cash balance, 2 = close + volume per stock.
     """
     if stock_dim <= 0:
         raise ValueError(f"stock_dim must be > 0, got {stock_dim}")
     ind = indicators if indicators is not None else INDICATORS
-    return 1 + (2 + len(ind)) * stock_dim
+    fusion = fusion_indicators or []
+    return 1 + (2 + len(ind) + len(fusion)) * stock_dim
+
+
+def _prepare_env_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Sort and index *df* for FinRL ``StockTradingEnv``.
+
+    Daily data uses ``date`` factorize; 5min data uses ``(date, time)``
+    combined factorize so each bar gets a unique integer index.
+    """
+    env_df = df.sort_values(["date", "tic"]).reset_index(drop=True).copy()
+    if "time" in env_df.columns:
+        env_df.index = pd.factorize(
+            env_df["date"].astype(str) + "_" + env_df["time"].astype(str)
+        )[0]
+    else:
+        env_df.index = env_df["date"].factorize()[0]
+    return env_df
 
 
 def build_env(
     df: pd.DataFrame,
     stock_dim: int,
+    mode: str = "trading",
     initial_amount: float = 1_000_000.0,
     hmax: int = 100,
     buy_cost_pct: float = 0.001,
     sell_cost_pct: float = 0.001,
     reward_scaling: float = 1e-4,
     indicators: list[str] | None = None,
+    fusion_indicators: list[str] | None = None,
+    reward_type: str = "daily_return",
+    future_horizon: int = 1,
+    normalize_obs: bool = True,
 ) -> Any:
-    """Create and return a FinRL ``StockTradingEnv`` instance.
+    """Create and return a FinRL ``StockTradingEnv`` or ``StockScoringEnv`` instance.
 
     Parameters
     ----------
+    mode:
+        Environment mode: "trading" (default) or "scoring".
+        - "trading": Multi-stock portfolio trading (FinRL StockTradingEnv)
+        - "scoring": Single-stock scoring for selection (StockScoringEnv)
     df:
         MarketDataset DataFrame. Must contain all required indicator columns.
     stock_dim:
         Number of unique tickers (N). Validated against ``len(df['tic'].unique())``.
+        For scoring mode, must be 1.
     initial_amount:
-        Starting cash (RMB).
+        Starting cash (RMB). Only used in trading mode.
     hmax:
-        Max shares per trade action.
+        Max shares per trade action. Only used in trading mode.
     buy_cost_pct:
-        Transaction cost fraction for buys.
+        Transaction cost fraction for buys. Only used in trading mode.
     sell_cost_pct:
-        Transaction cost fraction for sells.
+        Transaction cost fraction for sells. Only used in trading mode.
     reward_scaling:
-        Scales portfolio value change to RL reward.
+        Scales portfolio value change to RL reward. Only used in trading mode.
     indicators:
         List of technical indicator column names. Defaults to :data:`INDICATORS`.
+    fusion_indicators:
+        Optional list of additional feature columns (e.g. sentiment,
+        fundamentals) to append to the observation space. Only used in trading mode.
+    reward_type:
+        Reward calculation for scoring mode: "daily_return" or "future_return".
+    future_horizon:
+        Number of days ahead for future_return calculation in scoring mode.
+    normalize_obs:
+        Whether to normalize observations in scoring mode.
 
     Returns
     -------
-    StockTradingEnv
-        Configured FinRL environment.
+    StockTradingEnv or StockScoringEnv
+        Configured environment based on mode.
 
     Raises
     ------
     ValueError
-        If *stock_dim* doesn't match the number of unique tickers in *df*.
+        If *stock_dim* doesn't match the number of unique tickers in *df*,
+        or if scoring mode is used with stock_dim != 1.
     """
-    # FinRL imports optional Alpaca modules at package-import time.
-    # Provide a tiny stub so local/test environments don't need alpaca deps.
-    if "alpaca_trade_api" not in sys.modules:
-        alpaca_stub = types.ModuleType("alpaca_trade_api")
-        alpaca_stub.REST = object  # type: ignore[attr-defined]
-        sys.modules["alpaca_trade_api"] = alpaca_stub
+    if mode not in ["trading", "scoring"]:
+        raise ValueError(f"mode must be 'trading' or 'scoring', got {mode!r}")
 
+    if mode == "scoring":
+        if stock_dim != 1:
+            raise ValueError(
+                f"Scoring mode requires stock_dim=1, got {stock_dim}. "
+                "Train on single stocks and score them independently."
+            )
+        from finquant.training.scoring_env import build_scoring_env
+
+        ind = indicators if indicators is not None else INDICATORS
+        return build_scoring_env(
+            df=df,
+            indicators=ind,
+            reward_type=reward_type,
+            future_horizon=future_horizon,
+            normalize_obs=normalize_obs,
+        )
+
+    # Trading mode (existing logic)
     try:
         from finrl.meta.env_stock_trading.env_stocktrading import StockTradingEnv  # type: ignore[import]
     except ModuleNotFoundError:
@@ -107,6 +179,8 @@ def build_env(
         StockTradingEnv = module.StockTradingEnv
 
     ind = indicators if indicators is not None else INDICATORS
+    fusion = fusion_indicators or []
+    tech_list = ind + fusion
 
     actual_n = df["tic"].nunique()
     if actual_n != stock_dim:
@@ -114,13 +188,9 @@ def build_env(
             f"stock_dim={stock_dim} but df contains {actual_n} unique tickers"
         )
 
-    expected_dim = compute_obs_dim(stock_dim, ind)
+    expected_dim = compute_obs_dim(stock_dim, ind, fusion)
 
-    # FinRL expects each trading day to share a common integer index across all
-    # tickers; otherwise ``df.loc[day, :]`` can return a scalar row instead of
-    # a per-day DataFrame slice for multi-stock environments.
-    env_df = df.sort_values(["date", "tic"]).reset_index(drop=True).copy()
-    env_df.index = env_df["date"].factorize()[0]
+    env_df = _prepare_env_df(df)
 
     env = StockTradingEnv(
         df=env_df,
@@ -133,7 +203,7 @@ def build_env(
         reward_scaling=reward_scaling,
         state_space=expected_dim,
         action_space=stock_dim,
-        tech_indicator_list=ind,
+        tech_indicator_list=tech_list,
     )
 
     # Validate observation_space dimension matches expectation

@@ -1,0 +1,64 @@
+# ZZ500 Single-Stock RL Configuration
+# Model evaluates each stock independently
+
+# Stock universe (loaded from database)
+# Note: This placeholder will be replaced by train script with actual stocks from database
+stocks:
+  - "000001.SZ"  # Placeholder to pass validation
+
+dates:
+  train_start: "2023-01-01"
+  train_end: "2024-06-30"
+  test_start: "2024-07-01"
+  test_end: "2024-12-31"
+
+data:
+  source_priority: ["db_daily"]
+  output_dir: "data/processed"
+
+# Technical indicators (7 default)
+indicators:
+  - "macd"
+  - "boll_ub"
+  - "boll_lb"
+  - "rsi_30"
+  - "dx_30"
+  - "close_30_sma"
+  - "close_60_sma"
+
+# Single-stock environment
+environment:
+  stock_dim: 1  # KEY: Single stock per environment
+  initial_amount: 1000000
+  hmax: 100
+  buy_cost_pct: 0.001
+  sell_cost_pct: 0.001
+  reward_scaling: 0.0001
+
+# Training configuration
+training:
+  algorithm: "ppo"
+  total_timesteps: 2000000
+  model_dir: "models/zz500_single_stock"
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 20
+    gamma: 0.99
+
+# ZZ500 selection parameters
+zz500_selection:
+  portfolio_size: 5  # Maintain 5-stock portfolio
+  score_threshold: 0.7  # Minimum sigmoid(action) score
+  score_mapping: "sigmoid"  # sigmoid, linear, or direct
+  position_sizing: "score_weighted"  # score_weighted or equal_weight
+
+  # Risk management
+  stop_loss_pct: -0.05  # -5%
+  take_profit_pct: 0.20  # +20%
+  rl_exit_threshold: -0.2  # Exit if sigmoid(action) < 0.8 (action < -1.39)
+
+logging:
+  level: "INFO"
+  log_dir: "logs/zz500_rl"

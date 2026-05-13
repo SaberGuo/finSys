@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "date": "2024-09-30",
+  "selected_tickers": [
+    "000002.SZ"
+  ],
+  "scores": {
+    "000002.SZ": 0.7703675585049636
+  },
+  "market_state": "uptrend",
+  "active_factors": [
+    "ma_breakout",
+    "volume_surge"
+  ],
+  "factor_weights": {
+    "ma_breakout": 0.6,
+    "volume_surge": 0.4
+  },
+  "index_metrics": {},
+  "exclusion_reasons": {}
+}

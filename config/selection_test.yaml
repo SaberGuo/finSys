@@ -1,0 +1,59 @@
+# Selection Module Test Configuration
+# For testing stock selection with market state classification and factor scoring
+
+stocks:
+  - "000001.SZ"
+  - "000002.SZ"
+  - "600000.SH"
+  - "600016.SH"
+  - "600019.SH"
+  - "600028.SH"
+  - "600030.SH"
+  - "600036.SH"
+  - "600048.SH"
+  - "600050.SH"
+  # Add more CSI 500 constituent stocks as needed
+
+dates:
+  train_start: "2023-01-01"
+  train_end: "2023-06-30"
+  test_start: "2023-07-01"
+  test_end: "2023-12-31"
+
+data:
+  source_priority: ["db_daily", "xtquant", "akshare", "baostock"]
+  output_dir: "data/processed"
+
+# Selection module configuration
+selection:
+  index_ticker: "000905.SH"  # CSI 500 index
+  top_k: 10
+  ic_window: 60
+  ic_min_periods: 20
+  normalizer: "zscore"  # zscore | rank | mad
+  market_state:
+    auto_optimize: false  # Use hardcoded rules
+
+  # Exclusion rules
+  exclude_st: true
+  exclude_halt: true
+
+frequency:
+  value: "daily"  # Selection uses daily data
+
+environment:
+  initial_amount: 1_000_000
+  hmax: 100
+  buy_cost_pct: 0.001
+  sell_cost_pct: 0.001
+  reward_scaling: 0.0001
+
+training:
+  algorithm: "ppo"
+  total_timesteps: 100_000
+  model_dir: "models"
+
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  structured: true

@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "date": "2024-07-10",
+  "selected_tickers": [
+    "600676.SH"
+  ],
+  "scores": {
+    "600676.SH": 0.9999993672456967
+  },
+  "market_state": "uptrend",
+  "active_factors": [
+    "ma_breakout",
+    "volume_surge"
+  ],
+  "factor_weights": {
+    "ma_breakout": 0.6,
+    "volume_surge": 0.4
+  },
+  "index_metrics": {},
+  "exclusion_reasons": {}
+}

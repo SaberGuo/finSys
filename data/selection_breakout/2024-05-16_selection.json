@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "date": "2024-05-16",
+  "selected_tickers": [
+    "002410.SZ"
+  ],
+  "scores": {
+    "002410.SZ": 0.9677538850267694
+  },
+  "market_state": "downtrend",
+  "active_factors": [
+    "ma_breakout",
+    "volume_surge"
+  ],
+  "factor_weights": {
+    "ma_breakout": 0.6,
+    "volume_surge": 0.4
+  },
+  "index_metrics": {
+    "close": 18.78,
+    "adx": 34.30734812614618,
+    "ma50": 19.486,
+    "ma50_ratio": 0.9637688596941394,
+    "volume_ma20_ratio": 0.6272339304736547
+  },
+  "exclusion_reasons": {}
+}

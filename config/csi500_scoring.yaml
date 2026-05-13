@@ -1,0 +1,73 @@
+# Stock Scoring Mode Configuration
+# This config trains a single-stock scoring model that outputs a score for each stock.
+# The score is then used by PortfolioManager for trading decisions.
+
+stocks:
+  # Single stock for training (train one model per stock)
+  - "600519.SH"  # 贵州茅台
+
+dates:
+  train_start: "2024-01-01"
+  train_end: "2024-06-30"
+  test_start: "2024-07-01"
+  test_end: "2024-12-31"
+
+data:
+  source_priority: ["db_daily"]
+  output_dir: "data/processed"
+
+frequency: "daily"
+
+indicators:
+  - "macd"
+  - "boll_ub"
+  - "boll_lb"
+  - "rsi_30"
+  - "dx_30"
+  - "close_30_sma"
+  - "close_60_sma"
+
+target:
+  type: "future_return"
+  horizon: 1
+  threshold: 0.0
+
+training:
+  algorithm: "ppo"
+  total_timesteps: 100000
+  model_dir: "models/scoring"
+  mode: "scoring"  # NEW: scoring mode
+
+  # Scoring-specific configuration
+  scoring:
+    enabled: true
+    reward_type: "daily_return"  # or "future_return"
+    future_horizon: 1  # days ahead for future_return
+    normalize_obs: true  # normalize observations using z-score
+
+  # PPO hyperparameters
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.01
+
+# Portfolio management configuration (used during backtest)
+portfolio:
+  max_positions: 10  # Maximum number of concurrent positions
+  stop_loss_pct: -0.05  # Stop loss at -5%
+  take_profit_pct: 0.20  # Take profit at +20%
+  score_threshold: 0.0  # Minimum score to hold position
+  position_sizing: "equal"  # "equal" or "score_weighted"
+  transaction_cost_pct: 0.001  # 0.1% transaction cost
+
+environment:
+  initial_amount: 1000000
+  hmax: 100
+  buy_cost_pct: 0.001
+  sell_cost_pct: 0.001
+  reward_scaling: 0.0001

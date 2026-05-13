@@ -12,10 +12,13 @@
 4. [模型训练](#模型训练)
 5. [回测验证](#回测验证)
 6. [一键全流程](#一键全流程)
-7. [舆情分析（可选）](#舆情分析可选)
-8. [特征融合与对比（可选）](#特征融合与对比可选)
-9. [结果解读](#结果解读)
-10. [常见问题](#常见问题)
+7. [新闻自动抓取（可选）](#新闻自动抓取可选)
+8. [基本面数据抓取（可选）](#基本面数据抓取可选)
+9. [舆情分析（可选）](#舆情分析可选)
+10. [特征融合与对比（可选）](#特征融合与对比可选)
+11. [增强模式一键全流程](#增强模式一键全流程)
+12. [结果解读](#结果解读)
+13. [常见问题](#常见问题)
 
 ---
 
@@ -111,6 +114,7 @@ data:
 | `sentiment` | `enabled` | `false` | 是否启用舆情分析 |
 | `sentiment` | `model_id` | Qwen2.5-7B | 模型 ID |
 | `sentiment` | `quantize_4bit` | `true` | 4-bit 量化 |
+| `fundamentals` | `enabled` | `false` | 是否启用基本面数据 |
 
 > **没有迅投账号？** 将 `data.source_priority` 首项设为 `"akshare"`，无需任何认证即可下载 A 股数据。
 
@@ -234,9 +238,21 @@ Model saved to models/ppo_20250630_a1b2c3d4.zip
 
 ### Observation Space
 
-对于 `N` 只股票，状态向量维度 = `1 + 9 * N`：
+对于 `N` 只股票，状态向量维度取决于是否启用增强模式：
+
+**基线模式**（仅市场数据）：`1 + 9 * N`
 - `1` = 当前现金余额
 - `9 * N` = 每只股票：close + volume + 7 个技术指标
+
+**增强模式**（市场数据 + 舆情/基本面）：`1 + 16 * N`
+- 额外增加 7 个融合特征：
+  - `sentiment_score` — 舆情情感得分
+  - `event_count` — 事件数量
+  - `has_positive_event` — 正面事件标志
+  - `has_negative_event` — 负面事件标志
+  - `revenue_growth_pct` — 营收同比增长率
+  - `net_profit_margin` — 净利润率
+  - `debt_ratio` — 资产负债率
 
 ### 切换算法
 
@@ -307,6 +323,20 @@ finsys backtest \
 - `reports/ppo_YYYYMMDD_report.html` — 交互式净值曲线图
 - `reports/ppo_YYYYMMDD_metrics.csv` — 指标表格
 
+### 交易统计
+
+回测报告额外包含每笔交易的详细信息：
+
+| 字段 | 说明 |
+|------|------|
+| `total_trades` | 总交易次数 |
+| `buy_count` / `sell_count` | 买入 / 卖出次数 |
+| `win_rate` | 胜率（卖出价 > 平均持仓成本） |
+| `total_trade_amount` | 总交易金额 |
+| `avg_trade_amount` | 单笔平均交易金额 |
+
+交易明细可在 HTML 报告的「Trade History」表格中查看。
+
 ### 回测原理
 
 回测时系统会：
@@ -345,11 +375,143 @@ runs/latest/
 
 ---
 
+## 5分钟级别训练（可选）
+
+系统支持从 `zz500_data.db` 读取5分钟K线数据，构建多组技术指标的训练数据集，并训练RL模型。
+
+### 配置
+
+使用 `config/csi500_5min.yaml`，可定义多组 `indicator_sets`：
+
+```yaml
+frequency: "5min"
+indicator_sets:
+  - id: "trend_momentum_5min"
+    indicators: ["macd", "rsi_30", "close_30_sma"]
+  - id: "volatility_reversal_5min"
+    indicators: ["boll_ub", "boll_lb", "dx_30", "rsi_30"]
+```
+
+### 构建数据集
+
+```bash
+# 单个指标集
+finsys data build-5min \
+  --config config/csi500_5min.yaml \
+  --indicator-set trend_momentum_5min \
+  --output data/training/trend_momentum.parquet
+
+# 所有指标集
+finsys data build-5min \
+  --config config/csi500_5min.yaml \
+  --all-indicator-sets \
+  --output-dir data/training/
+```
+
+### 一键5分钟流水线
+
+```bash
+finsys run-5min \
+  --config config/csi500_5min.yaml \
+  --output runs/5min_exp_001 \
+  --algo ppo \
+  --timesteps 100000 \
+  --all-indicator-sets \
+  --enhanced
+```
+
+输出结构：
+
+```text
+runs/5min_exp_001/
+├── trend_momentum_5min/
+│   ├── dataset.parquet
+│   ├── models/
+│   │   └── ppo_trend_momentum_5min_YYYYMMDD_xxxxxxxx.zip
+│   └── reports/
+│       └── ppo_YYYYMMDD_report.html
+├── volatility_reversal_5min/
+│   └── ...
+├── comparison.csv
+└── comparison.json
+```
+
+### 多指标集对比
+
+```bash
+finsys compare-multi \
+  --run-dir runs/5min_exp_001 \
+  --output reports/comparison.csv
+```
+
+---
+
+## 新闻自动抓取（可选）
+
+系统自动从东方财富网抓取每只个股的最新新闻，无需手动准备输入文件。
+
+### 基本命令
+
+```bash
+finsys news fetch --config config/my_config.yaml --output data/news
+```
+
+### 输出格式
+
+生成 `data/news/news.jsonl`，每行一条记录：
+
+```jsonl
+{"date": "2024-07-01", "tic": "000001.SZ", "title": "平安银行发布半年报", "content": "净利润同比增长15%..."}
+```
+
+系统会自动去重（按 `date + tic + title`），避免重复分析。
+
+---
+
+## 基本面数据抓取（可选）
+
+从新浪财经获取利润表和资产负债表，计算以下指标：
+
+| 指标 | 计算方式 | 默认值 |
+|------|---------|--------|
+| `revenue_growth_pct` | 营收同比增长率 | 0.0 |
+| `net_profit_margin` | 净利润 / 营收 | 0.0 |
+| `debt_ratio` | 总负债 / 总资产 | 0.5 |
+| `roe` | 净利润 / 股东权益 | 0.0 |
+
+### 基本命令
+
+```bash
+finsys fundamentals fetch --config config/my_config.yaml --output data/fundamentals
+```
+
+抓取流程：
+1. 获取每只个股的利润表和资产负债表
+2. 按报告期计算上述指标
+3. 前向填充（forward-fill）到每个交易日
+4. 输出 `fundamentals.jsonl`
+
+---
+
 ## 舆情分析（可选）
 
 > **前提**：需要 GPU >= 8 GB VRAM，且已安装 `bitsandbytes`
 
-### 准备输入数据
+### 方式一：使用自动抓取的新闻
+
+```bash
+# 先抓取新闻
+finsys news fetch --config config/my_config.yaml --output data/news
+
+# 再运行 Qwen 分析
+finsys sentiment analyze \
+  --config config/my_config.yaml \
+  --input data/news/news.jsonl \
+  --output data/sentiment \
+  --verbose
+```
+
+### 方式二：使用手动准备的 JSONL
 
 创建 JSONL 文件（每行一条记录）：
 
@@ -376,7 +538,17 @@ finsys sentiment analyze \
 - `summary`: 200 字以内的摘要
 - `text_hash`: MD5 去重标识
 
-###  graceful degradation
+### Qwen 双重分析（情感 + 基本面线索）
+
+在增强模式下，Qwen 不仅分析情感倾向，还会提取基本面定性线索：
+
+- `revenue_growth_hint`: `positive` / `neutral` / `negative`
+- `profitability_hint`: `positive` / `neutral` / `negative`
+- `debt_hint`: `positive` / `neutral` / `negative`
+
+这些线索会映射为数值分数（positive=1.0, neutral=0.0, negative=-1.0），作为 RL 观测空间的额外维度。
+
+### graceful degradation
 
 如果 Qwen 加载失败（如显存不足），系统会：
 - 记录警告日志
@@ -387,22 +559,31 @@ finsys sentiment analyze \
 
 ## 特征融合与对比（可选）
 
-### 融合市场数据 + 舆情数据
+### 融合市场数据 + 舆情 + 基本面
 
 ```bash
 finsys fuse \
   --config config/my_config.yaml \
   --market data/processed/xxx.parquet \
   --sentiment data/sentiment/result.jsonl \
+  --fundamentals data/fundamentals/fundamentals.jsonl \
   --output data/enhanced/dataset.parquet \
   --verbose
 ```
+
+参数说明：
+- `--sentiment` — 舆情分析结果（可选）
+- `--fundamentals` — 基本面数据（可选）
+- 两者可单独或同时使用
 
 增强后的数据集会增加以下列：
 - `sentiment_score` — 当日平均情感得分
 - `event_count` — 事件数量
 - `has_positive_event` — 是否有正面事件
 - `has_negative_event` — 是否有负面事件
+- `revenue_growth_pct` — 营收同比增长率
+- `net_profit_margin` — 净利润率
+- `debt_ratio` — 资产负债率
 
 ### 使用增强数据训练
 
@@ -424,6 +605,80 @@ finsys compare \
 ```
 
 输出 JSON 格式的指标对比表，包含 `delta`（增强 - 基线）。
+
+---
+
+## 增强模式一键全流程
+
+### 基线模式（仅市场数据）
+
+```bash
+finsys run \
+  --config config/my_config.yaml \
+  --output runs/latest \
+  --algo ppo \
+  --timesteps 100000 \
+  --verbose
+```
+
+### 增强模式（市场 + 舆情 + 基本面）
+
+添加 `--enhanced` 标志，自动执行完整管道：
+
+```bash
+finsys run \
+  --config config/my_config.yaml \
+  --output runs/latest \
+  --algo ppo \
+  --timesteps 100000 \
+  --enhanced \
+  --verbose
+```
+
+增强模式的完整流程：
+1. **抓取市场数据** — `data fetch`
+2. **抓取新闻** — `news fetch`
+3. **舆情分析** — `sentiment analyze`（Qwen 双重分析）
+4. **抓取基本面** — `fundamentals fetch`
+5. **特征融合** — `fuse`
+6. **训练模型** — `train`
+7. **回测验证** — `backtest`
+
+### 输出结构
+
+**基线模式**：
+
+```text
+runs/latest/
+├── data/
+│   └── 20210101_20250630_dataset.parquet
+├── models/
+│   └── ppo_20250630_a1b2c3d4.zip
+└── reports/
+    ├── ppo_20250630_report.html
+    └── ppo_20250630_metrics.csv
+```
+
+**增强模式**：
+
+```text
+runs/latest/
+├── data/
+│   └── 20210101_20250630_dataset.parquet
+├── news/
+│   └── news.jsonl
+├── sentiment/
+│   └── result.jsonl
+├── fundamentals/
+│   └── fundamentals.jsonl
+├── enhanced/
+│   └── dataset.parquet
+├── models/
+│   └── ppo_20250630_a1b2c3d4.zip
+└── reports/
+    ├── ppo_20250630_report.html
+    └── ppo_20250630_metrics.csv
+```
 
 ---
 
@@ -551,7 +806,11 @@ xdg-open reports/ppo_20250630_report.html # Linux
 或使用一键命令：
 
 ```bash
+# 基线模式
 finsys run --config config/my_config.yaml --algo ppo --verbose
+
+# 增强模式（含舆情 + 基本面）
+finsys run --config config/my_config.yaml --algo ppo --enhanced --verbose
 ```
 
 ---

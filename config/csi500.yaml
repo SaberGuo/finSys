@@ -1,0 +1,103 @@
+# 中证500成分股示例配置
+# 成分股列表通过 akshare.index_stock_cons_weight_csindex(symbol="000905") 实时获取
+# 取前10只深市 + 前10只沪市，共20只
+
+stocks:
+  # 深市（.SZ）
+  - "000009.SZ"   # 中国宝安
+  - "000021.SZ"   # 深科技
+  - "000027.SZ"   # 深圳能源
+  - "000032.SZ"   # 深桑达A
+  - "000034.SZ"   # 神州数码
+  - "000039.SZ"   # 中集集团
+  - "000050.SZ"   # 深天马A
+  - "000060.SZ"   # 中金岭南
+  - "000062.SZ"   # 深圳华强
+  - "000088.SZ"   # 盐田港
+  # 沪市（.SH）
+  - "600004.SH"   # 白云机场
+  - "600007.SH"   # 中国国贸
+  - "600008.SH"   # 首创环保
+  - "600021.SH"   # 上海电力
+  - "600032.SH"   # 浙江新能
+  - "600038.SH"   # 中直股份
+  - "600060.SH"   # 海信视像
+  - "600062.SH"   # 华润双鹤
+  - "600095.SH"   # 湘财股份
+  - "600096.SH"   # 云天化
+
+dates:
+  train_start: "2020-01-01"
+  train_end: "2024-06-30"
+  test_start: "2024-07-01"
+  test_end: "2025-06-30"
+
+# 无需迅投授权，使用 akshare 免费下载
+data:
+  source_priority:
+    - "akshare"
+    - "baostock"
+  output_dir: "data/processed"
+  raw_dir: "data/raw"
+
+indicators:
+  - "macd"
+  - "boll_ub"
+  - "boll_lb"
+  - "rsi_30"
+  - "dx_30"
+  - "close_30_sma"
+  - "close_60_sma"
+
+environment:
+  initial_amount: 1000000
+  hmax: 100
+  buy_cost_pct: 0.001
+  sell_cost_pct: 0.001
+  reward_scaling: 0.0001
+
+training:
+  algorithm: "ppo"
+  total_timesteps: 200000
+  model_dir: "models"
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+  sac:
+    learning_rate: 0.0001
+    batch_size: 256
+    gamma: 0.99
+    tau: 0.005
+  td3:
+    learning_rate: 0.001
+    batch_size: 256
+    gamma: 0.99
+    tau: 0.005
+
+backtest:
+  report_dir: "reports"
+  benchmark: "000905.SH"   # 中证500指数作为回测基准
+
+sentiment:
+  enabled: false
+  news_file: ""
+  output_dir: "data/sentiment"
+  model_id: "Qwen/Qwen2.5-7B-Instruct"
+  quantize_4bit: true
+  max_new_tokens: 512
+  batch_size: 8
+
+fundamentals:
+  enabled: false
+  reports_dir: "data/reports_text"
+  output_dir: "data/fundamentals"
+
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  structured: true
+
+live_trading: false

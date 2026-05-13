@@ -1,0 +1,62 @@
+# Breakout Selection Strategy Configuration - Test Version
+# 更宽松的参数用于测试
+
+stocks:
+  - "000001.SZ"
+  - "000002.SZ"
+  - "000063.SZ"
+  - "000100.SZ"
+  - "000333.SZ"
+  - "600030.SH"
+  - "600031.SH"
+  - "600036.SH"
+  - "600048.SH"
+  - "600050.SH"
+
+dates:
+  train_start: "2020-01-01"
+  train_end: "2020-06-30"
+  test_start: "2020-07-01"
+  test_end: "2020-12-31"
+
+data:
+  source_priority: ["db_daily"]
+  output_dir: "data/processed"
+
+# Selection module configuration
+selection:
+  strategy_type: "breakout"
+  index_ticker: "000905.SH"  # 使用一只股票作为伪指数（突破策略不需要真实指数）
+
+  # Breakout strategy parameters (更宽松的测试参数)
+  breakout:
+    ma_periods: [30, 60]                # 使用更短的MA周期
+    volume_multiplier: 1.2               # 降低放量要求
+    volume_ma_period: 20
+    breakout_threshold: 1.02             # 降低突破阈值到2%
+    lookback_days: 30                    # 缩短回溯期
+    confirmation_days: 2                 # 减少确认天数
+    anti_jitter_mode: "either"           # 使用更宽松的模式
+    top_k: 10
+    exclude_st: true
+    exclude_halt: true
+
+frequency:
+  value: "daily"
+
+environment:
+  initial_amount: 1_000_000
+  hmax: 100
+  buy_cost_pct: 0.001
+  sell_cost_pct: 0.001
+  reward_scaling: 0.0001
+
+training:
+  algorithm: "ppo"
+  total_timesteps: 100_000
+  model_dir: "models"
+
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  structured: true

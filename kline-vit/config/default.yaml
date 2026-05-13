@@ -1,0 +1,30 @@
+data:
+  db_path: "../data/processed/hk_stocks.db"
+  image_dir: "data/images"
+  daily_window: 60
+  weekly_window: 13
+  label_horizon: 5
+  label_threshold: 0.02
+  train_end: "2023-12-31"
+  val_end: "2024-12-31"
+
+model:
+  name: "vit_tiny_patch16_224"
+  pretrained: true
+  num_classes: 2
+  freeze_layers: 8
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  batch_size: 32
+  max_epochs: 20
+  early_stop_patience: 5
+  model_save_path: "models/best_model.pth"
+
+backtest:
+  initial_cash: 1000000
+  commission: 0.001
+  signal_threshold: 0.6
+  max_position_pct: 0.20
+  stop_loss_pct: 0.08
+  start_date: "2025-01-01"
+  end_date: "2026-05-07"

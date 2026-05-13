@@ -77,22 +77,41 @@ def fuse_dataframes(
     return merged.reset_index(drop=True)
 
 
+def _load_jsonl(path: Path) -> pd.DataFrame:
+    """Load a JSONL file into a DataFrame."""
+    records: list[dict] = []
+    if path.exists():
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    records.append(json.loads(line))
+    return pd.DataFrame(records) if records else pd.DataFrame()
+
+
 def fuse_datasets(
     market_df: pd.DataFrame,
-    sentiment_file: Path | str,
-    output_path: Path | str,
+    sentiment_file: Path | str | None = None,
+    fundamental_file: Path | str | None = None,
+    output_path: Path | str = "data/enhanced/dataset.parquet",
+    frequency: str = "daily",
     verbose: bool = False,
 ) -> Path:
-    """Load sentiment JSONL, fuse with *market_df*, and save to Parquet.
+    """Load optional sentiment / fundamental JSONLs, fuse with *market_df*, and save to Parquet.
 
     Parameters
     ----------
     market_df:
         MarketDataset DataFrame.
     sentiment_file:
-        Path to JSONL file. Each line: ``{date, tic, sentiment_score, ...}``.
+        Optional path to sentiment JSONL.
+    fundamental_file:
+        Optional path to fundamental JSONL.
     output_path:
         Destination Parquet path.
+    frequency:
+        Data frequency ("daily" or "5min"). For 5min, merge is still on ``(date, tic)``
+        since sentiment/fundamental data is daily-granularity.
     verbose:
         Print row counts if True.
 
@@ -101,27 +120,30 @@ def fuse_datasets(
     Path
         Path to the saved Parquet file.
     """
-    sentiment_file = Path(sentiment_file)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    records: list[dict] = []
-    if sentiment_file.exists():
-        with sentiment_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    records.append(json.loads(line))
+    # Load optional auxiliary dataframes
+    sentiment_df = _load_jsonl(Path(sentiment_file)) if sentiment_file else pd.DataFrame()
+    fundamental_df = _load_jsonl(Path(fundamental_file)) if fundamental_file else pd.DataFrame()
 
-    sentiment_df = pd.DataFrame(records) if records else pd.DataFrame()
+    # Merge auxiliary frames on (date, tic) if both present
+    if not sentiment_df.empty and not fundamental_df.empty:
+        aux_df = sentiment_df.merge(fundamental_df, on=["date", "tic"], how="outer")
+    elif not sentiment_df.empty:
+        aux_df = sentiment_df
+    elif not fundamental_df.empty:
+        aux_df = fundamental_df
+    else:
+        aux_df = pd.DataFrame()
 
     if verbose:
         print(
             f"Fusing {len(market_df)} market rows "
-            f"with {len(sentiment_df)} sentiment records ..."
+            f"with {len(sentiment_df)} sentiment + {len(fundamental_df)} fundamental records ..."
         )
 
-    enhanced = fuse_dataframes(market_df, sentiment_df)
+    enhanced = fuse_dataframes(market_df, aux_df)
     enhanced.to_parquet(output_path, index=False)
 
     if verbose:
