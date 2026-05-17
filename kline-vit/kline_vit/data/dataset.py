@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import Callable, Optional
+import multiprocessing as mp
+import os
 
 import pandas as pd
 import torch
@@ -72,6 +74,7 @@ def build_dataset_index(
     split: str,
     filter_codes: Optional[list[str]] = None,
     progress_callback: Optional[Callable[[str, int, int, int], None]] = None,
+    num_workers: int = 0,
 ) -> pd.DataFrame:
     """
     Build dataset index CSV for the given split.
@@ -80,7 +83,35 @@ def build_dataset_index(
       train: date <= train_end
       val:   train_end < date <= val_end  (with 5-day gap)
       test:  date > val_end               (with 5-day gap)
+
+    num_workers: parallel processes (0 = auto = cpu_count)
     """
+    data_cfg = config["data"]
+    reader = DBReader(db_path)
+    codes = filter_codes if filter_codes else reader.get_all_codes()
+    n_workers = num_workers or os.cpu_count() or 1
+
+    task_args = [
+        (code, db_path, image_dir, config, split)
+        for code in codes
+    ]
+
+    records = []
+    with mp.Pool(processes=n_workers) as pool:
+        for idx, (code, code_records) in enumerate(
+            pool.imap_unordered(_process_code, task_args), 1
+        ):
+            records.extend(code_records)
+            if progress_callback:
+                progress_callback(code, idx, len(codes), len(records))
+
+    return pd.DataFrame(records)
+
+
+def _process_code(args: tuple) -> tuple[str, list[dict]]:
+    """Worker function: process one stock code, return (code, records)."""
+    code, db_path, image_dir, config, split = args
+
     data_cfg = config["data"]
     daily_window: int = data_cfg.get("daily_window", 60)
     weekly_window: int = data_cfg.get("weekly_window", 13)
@@ -88,91 +119,73 @@ def build_dataset_index(
     label_threshold: float = data_cfg.get("label_threshold", 0.02)
     train_end: str = data_cfg.get("train_end", "2023-12-31")
     val_end: str = data_cfg.get("val_end", "2024-12-31")
-    gap_days = label_horizon  # avoid leakage
 
-    reader = DBReader(db_path)
     from kline_vit.data.renderer import KlineRenderer
+    reader = DBReader(db_path)
     renderer = KlineRenderer()
     label_gen = LabelGenerator(horizon=label_horizon, threshold=label_threshold)
 
-    codes = filter_codes if filter_codes else reader.get_all_codes()
+    try:
+        min_date, max_date = reader.get_date_range(code)
+    except KeyError:
+        return code, []
+
+    all_dates = reader.get_tradeable_dates(code, min_date, max_date)
+    if len(all_dates) < daily_window + label_horizon + 5:
+        return code, []
 
     records = []
-    for idx, code in enumerate(codes, 1):
+    for i, anchor_date in enumerate(all_dates):
+        if split == "train" and anchor_date > train_end:
+            continue
+        elif split == "val" and (anchor_date <= train_end or anchor_date > val_end):
+            continue
+        elif split == "test" and anchor_date <= val_end:
+            continue
+
+        if i < daily_window:
+            continue
+
+        daily_df = reader.get_daily_data(code, anchor_date, n_days=daily_window + weekly_window * 5)
+        if len(daily_df) < daily_window:
+            continue
+
+        weekly_df = _resample_weekly(daily_df, weekly_window)
+        if len(weekly_df) < weekly_window:
+            continue
+
+        future_df = reader.get_future_close(code, anchor_date, label_horizon)
+        if len(future_df) < label_horizon:
+            continue
+
+        combined_df = pd.concat([daily_df, future_df], ignore_index=True)
+        combined_df = combined_df.drop_duplicates("date").sort_values("date").reset_index(drop=True)
+
+        result = label_gen.generate(combined_df, anchor_date)
+        if result is None:
+            continue
+        label, future_return = result
+
         try:
-            min_date, max_date = reader.get_date_range(code)
-        except KeyError:
-            if progress_callback:
-                progress_callback(code, idx, len(codes), len(records))
+            img_path = renderer.render(
+                code, anchor_date,
+                daily_df.tail(daily_window),
+                weekly_df.tail(weekly_window),
+                output_dir=image_dir,
+                split=split,
+            )
+        except Exception:
             continue
 
-        # Determine anchor date range for this split
-        all_dates = reader.get_tradeable_dates(code, min_date, max_date)
-        if len(all_dates) < daily_window + label_horizon + 5:
-            continue
+        records.append({
+            "image_path": img_path,
+            "label": label,
+            "code": code,
+            "date": anchor_date,
+            "future_return": future_return,
+        })
 
-        for i, anchor_date in enumerate(all_dates):
-            # Split filtering
-            if split == "train" and anchor_date > train_end:
-                continue
-            elif split == "val" and (anchor_date <= train_end or anchor_date > val_end):
-                continue
-            elif split == "test" and anchor_date <= val_end:
-                continue
-
-            # Need enough history
-            history_idx = i
-            if history_idx < daily_window:
-                continue
-
-            # Fetch data
-            daily_df = reader.get_daily_data(code, anchor_date, n_days=daily_window + weekly_window * 5)
-            if len(daily_df) < daily_window:
-                continue
-
-            # Resample weekly
-            weekly_df = _resample_weekly(daily_df, weekly_window)
-            if len(weekly_df) < weekly_window:
-                continue
-
-            # Get future data for label (need data beyond anchor_date)
-            future_df = reader.get_future_close(code, anchor_date, label_horizon)
-            if len(future_df) < label_horizon:
-                continue
-
-            # Combine for label generation
-            combined_df = pd.concat([daily_df, future_df], ignore_index=True)
-            combined_df = combined_df.drop_duplicates("date").sort_values("date").reset_index(drop=True)
-
-            result = label_gen.generate(combined_df, anchor_date)
-            if result is None:
-                continue
-            label, future_return = result
-
-            # Render image
-            try:
-                img_path = renderer.render(
-                    code, anchor_date,
-                    daily_df.tail(daily_window),
-                    weekly_df.tail(weekly_window),
-                    output_dir=image_dir,
-                    split=split,
-                )
-            except Exception:
-                continue
-
-            records.append({
-                "image_path": img_path,
-                "label": label,
-                "code": code,
-                "date": anchor_date,
-                "future_return": future_return,
-            })
-
-        if progress_callback:
-            progress_callback(code, idx, len(codes), len(records))
-
-    return pd.DataFrame(records)
+    return code, records
 
 
 def _resample_weekly(daily_df: pd.DataFrame, n_weeks: int) -> pd.DataFrame:

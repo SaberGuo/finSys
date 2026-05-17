@@ -26,9 +26,11 @@ def main(ctx: click.Context, config: str) -> None:
 @click.option("--output-dir", default="data/images", show_default=True, help="Image output directory")
 @click.option("--codes", default=None, help="Comma-separated stock codes to process (default: all)")
 @click.option("--limit", default=None, type=int, help="Process only the first N stocks (default: all)")
+@click.option("--workers", default=0, type=int, show_default=True, help="Parallel worker processes (0 = auto)")
 @click.pass_context
-def build_dataset(ctx: click.Context, db_path: str, output_dir: str, codes: str | None, limit: int | None) -> None:
+def build_dataset(ctx: click.Context, db_path: str, output_dir: str, codes: str | None, limit: int | None, workers: int) -> None:
     """Build K-line image dataset from SQLite database."""
+    import multiprocessing as mp
     from kline_vit.data.dataset import build_dataset_index
     from kline_vit.data.db_reader import DBReader
 
@@ -43,15 +45,18 @@ def build_dataset(ctx: click.Context, db_path: str, output_dir: str, codes: str 
     if limit is not None:
         all_codes = all_codes[:limit]
         filter_codes = all_codes
+
+    n_workers = workers or mp.cpu_count()
     click.echo(f"DB: {db_path}")
     click.echo(f"Output: {output_dir}")
-    click.echo(f"Stocks to process: {len(all_codes)}")
+    click.echo(f"Stocks to process: {len(all_codes)}  workers: {n_workers}")
 
     for split in ("train", "val", "test"):
         click.echo(f"\n[{split}] Building split...")
         df = build_dataset_index(
             db_path, output_dir, config, split,
             filter_codes=filter_codes,
+            num_workers=n_workers,
             progress_callback=lambda code, done, total, n_records: click.echo(
                 f"  [{split}] {done}/{total} {code:>10}  records so far: {n_records}"
             ),
