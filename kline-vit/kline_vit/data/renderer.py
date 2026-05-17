@@ -36,10 +36,17 @@ class KlineRenderer:
 
         style = mpf.make_mpf_style(
             base_mpf_style="nightclouds",
+            marketcolors=mpf.make_marketcolors(
+                up="#ef5350",    # 阳线：红
+                down="#26a69a",  # 阴线：绿
+                edge="inherit",
+                wick="inherit",
+                volume="inherit",
+            ),
             rc={"axes.labelsize": 0, "xtick.labelsize": 0, "ytick.labelsize": 0},
         )
 
-        fig, axes = plt.subplots(1, 2, figsize=(8.96, 4.48), dpi=50)
+        fig, axes = plt.subplots(1, 2, figsize=(4.48, 2.24), dpi=100)
 
         # Left panel: weekly
         mpf.plot(
@@ -66,7 +73,7 @@ class KlineRenderer:
         axes[1].axis("off")
 
         plt.tight_layout(pad=0)
-        fig.savefig(str(out_path), dpi=50, bbox_inches="tight", pad_inches=0)
+        fig.savefig(str(out_path), dpi=100, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
 
         return str(out_path)

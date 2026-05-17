@@ -13,10 +13,14 @@ from kline_vit.data.label_generator import LabelGenerator
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 
+# Kline-specific normalization: neutral mean preserves red/green color contrast
+_KLINE_MEAN = [0.5, 0.5, 0.5]
+_KLINE_STD = [0.5, 0.5, 0.5]
+
 _DEFAULT_TRANSFORM = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+    transforms.Normalize(mean=_KLINE_MEAN, std=_KLINE_STD),
 ])
 
 
